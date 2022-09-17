@@ -1,0 +1,323 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create VPC stack
+
+############### Parameters ###############
+
+Parameters:
+
+  AvailabilityZone:
+    Default: ap-northeast-1a
+    Type: AWS::EC2::AvailabilityZone::Name	
+  
+  VPCCIDR:
+    Default: 10.0.0.0/16
+    Description: Type VPCCIDR Range . Default is 10.0.0.0/16 .
+    Type: String
+
+  PublicSubnetCIDR:
+    Default: 10.0.1.0/24
+    Description: Type PublicSubnet's CIDR Range . Default is 10.0.1.0/24 .
+    Type: String
+  
+  PrivateSubnetCIDR:
+    Default: 10.0.2.0/24
+    Description: Type PrivateSubnet's CIDR Range . Default is 10.0.2.0/24 .
+    Type: String
+
+  TagsEnvironment:
+    Default: Devlopment
+    Description: Choose Environment Type .
+    Type: String
+    AllowedValues:
+      - Production
+      - Staging
+      - Devlopment
+  
+  TagsOwner:
+    Description: Type Resouces Create User name .
+    Type: String
+
+  FromCIDR:
+    Description: Type Your ssh from CIDR. must prefix[/32].
+    Type: String 
+
+  AMI:
+    Default: ami-0f8048fa3e3b9e8ff
+    Description: Type AMI Image ID. Default is ubuntu.
+    Type: String
+
+  InstanceType:
+    Default: t2.micro
+    Description: Type Instance type. Default is t2.micro.
+    Type: String
+    AllowedValues:
+      - t2.micro
+      - m1.small
+      - m1.large
+      - t2.medium
+  
+  KeyName:
+    Description: Type KeyName.
+    Type: String
+
+  PrivateIP:
+    Description: Type Bastion Private IP address.
+    Type: String
+
+############### Resources ###############
+
+Resources:
+
+##### VPC #####
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: !Ref VPCCIDR
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+#      InstanceTenancy: String
+#      Ipv4IpamPoolId: String
+#      Ipv4NetmaskLength: Integer
+      Tags: 
+      - Key: "Name"
+        Value: "VPC"
+      - Key: "Environment"
+        Value: !Ref TagsEnvironment
+      - Key: "Owner"
+        Value: !Ref TagsOwner
+
+##### Subnet #####
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties: 
+#      AssignIpv6AddressOnCreation: Boolean
+      AvailabilityZone: !Ref AvailabilityZone
+#      AvailabilityZoneId: String
+      CidrBlock: !Ref PublicSubnetCIDR
+#      EnableDns64: Boolean
+#      Ipv6CidrBlock: String
+#      Ipv6Native: Boolean
+      MapPublicIpOnLaunch: false
+#      OutpostArn: String
+#      PrivateDnsNameOptionsOnLaunch: Json
+      Tags: 
+      - Key: "Name"
+        Value: "PublicSubnet"
+      - Key: "Environment"
+        Value: !Ref TagsEnvironment
+      - Key: "Owner"
+        Value: !Ref TagsOwner
+      VpcId: !Ref VPC
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties: 
+#      AssignIpv6AddressOnCreation: Boolean
+      AvailabilityZone: !Ref AvailabilityZone
+#      AvailabilityZoneId: String
+      CidrBlock: !Ref PrivateSubnetCIDR
+#      EnableDns64: Boolean
+#      Ipv6CidrBlock: String
+#      Ipv6Native: Boolean
+      MapPublicIpOnLaunch: false
+#      OutpostArn: String
+#      PrivateDnsNameOptionsOnLaunch: Json
+      Tags: 
+      - Key: "Name"
+        Value: "PrivateSubnet"
+      - Key: "Environment"
+        Value: !Ref TagsEnvironment
+      - Key: "Owner"
+        Value: !Ref TagsOwner
+      VpcId: !Ref VPC
+
+##### InternetGateway #####
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags: 
+      - Key: "Name"
+        Value: "InternetGateway"
+      - Key: "Environment"
+        Value: !Ref TagsEnvironment
+      - Key: "Owner"
+        Value: !Ref TagsOwner
+
+  InternetGatewayAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+#      VpnGatewayId: String
+
+##### RouteTable #####
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      Tags: 
+      - Key: "Name"
+        Value: "PublicRouteTable"
+      - Key: "Environment"
+        Value: !Ref TagsEnvironment
+      - Key: "Owner"
+        Value: !Ref TagsOwner
+      VpcId: !Ref VPC
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      Tags: 
+      - Key: "Name"
+        Value: "PrivateRouteTable"
+      - Key: "Environment"
+        Value: !Ref TagsEnvironment
+      - Key: "Owner"
+        Value: !Ref TagsOwner
+      VpcId: !Ref VPC
+
+  PublicRouting:
+    Type: AWS::EC2::Route
+    Properties: 
+#      CarrierGatewayId: String
+      DestinationCidrBlock: 0.0.0.0/0
+#      DestinationIpv6CidrBlock: String
+#      EgressOnlyInternetGatewayId: String
+      GatewayId: !Ref InternetGateway
+#      InstanceId: String
+#      LocalGatewayId: String
+#      NatGatewayId: String
+#      NetworkInterfaceId: String
+      RouteTableId: !Ref PublicRouteTable
+#      TransitGatewayId: String
+#      VpcEndpointId: String
+#      VpcPeeringConnectionId: String
+
+  AssociatePblicRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+########## SecurityGroup for EC2 ##########
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: SecurityGroupForEC2
+      GroupName: SGforEC2
+#      SecurityGroupEgress: 
+#        - Egress
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: !Ref FromCIDR
+      Tags: 
+      - Key: "Name"
+        Value: "SGforEC2"
+      - Key: "Environment"
+        Value: !Ref TagsEnvironment
+      - Key: "Owner"
+        Value: !Ref TagsOwner
+      VpcId: !Ref VPC
+
+
+  Bastion:
+    Type: AWS::EC2::Instance
+    Properties: 
+#      AdditionalInfo: String
+#      Affinity: String
+      AvailabilityZone: !Ref AvailabilityZone
+      BlockDeviceMappings: 
+      - DeviceName: "/dev/sdm"
+        Ebs: 
+          VolumeType: "gp2"
+          DeleteOnTermination: "true"
+          VolumeSize: "8"
+#      CpuOptions: 
+#        CpuOptions
+#      CreditSpecification: 
+#        CreditSpecification
+      DisableApiTermination: false
+#      EbsOptimized: Boolean
+#      ElasticGpuSpecifications: 
+#        - ElasticGpuSpecification
+#      ElasticInferenceAccelerators: 
+#        - ElasticInferenceAccelerator
+#      EnclaveOptions: 
+#        EnclaveOptions
+#      HibernationOptions: 
+#        HibernationOptions
+#      HostId: String
+#      HostResourceGroupArn: String
+#      IamInstanceProfile: String
+      ImageId: !Ref AMI
+#      InstanceInitiatedShutdownBehavior: String
+      InstanceType: !Ref InstanceType
+#      Ipv6AddressCount: Integer
+#      Ipv6Addresses: 
+#        - InstanceIpv6Address
+#      KernelId: String
+      KeyName: !Ref KeyName
+#      LaunchTemplate: 
+#        LaunchTemplateSpecification
+#      LicenseSpecifications: 
+#        - LicenseSpecification
+#      Monitoring: Boolean
+#      NetworkInterfaces: 
+#        - NetworkInterface
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: !Ref PublicSubnet
+          GroupSet:
+           - !Ref SecurityGroup
+#      PlacementGroupName: String
+#      PrivateDnsNameOptions: 
+#        PrivateDnsNameOptions
+#      PrivateIpAddress: !Ref PrivateIP
+#      PropagateTagsToVolumeOnCreation: Boolean
+#      RamdiskId: String
+#      SecurityGroupIds: 
+#        - !Ref SecurityGroup
+#      SecurityGroups: 
+#        - String
+#      SourceDestCheck: Boolean
+#      SsmAssociations: 
+#        - SsmAssociation
+#      SubnetId: !Ref PublicSubnet
+      Tags: 
+      - Key: "Name"
+        Value: "Bastion"
+      - Key: "Environment"
+        Value: !Ref TagsEnvironment
+      - Key: "Owner"
+        Value: !Ref TagsOwner
+#      Tenancy: String
+      UserData:
+        Fn::Base64: |
+          #!/bin/zsh
+          sudo localectl set-locale "LANG=ja_JP.UTF-8"
+          sudo timedatectl set-timezone Asia/Tokyo
+          sudo apt-get -y update
+          sudo apt-get -y upgrade
+          git clone https://github.com/rbenv/rbenv.git ~/.rbenv
+          echo 'export PATH=$HOME/.rbenv/bin:$PATH' >> ~/.bash_profile
+          .rbenv/bin/rbenv init >> ~/.bash_profile
+          mkdir -p "$(rbenv root)"/plugins
+          git clone https://github.com/rbenv/ruby-build.git "$(rbenv root)"/plugins/ruby-build
+          sudo apt install -y make gcc nodejs
+          sudo apt-get install -y libz-dev
+          rbenv install 2.6.6
+          sudo apt-get install -y sqlite3
+          curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
+          echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
+          less /etc/apt/sources.list.d/yarn.list
+          sudo apt install -y yarn
+          
+#      Volumes: 
+#        - Volume
